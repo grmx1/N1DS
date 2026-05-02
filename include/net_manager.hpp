@@ -18,6 +18,7 @@ class NetManager{
 	~NetManager();
 
 	int init();
+	int get_header_offset(int link_type);
 
 	private:
 

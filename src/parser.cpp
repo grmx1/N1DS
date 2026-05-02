@@ -178,6 +178,16 @@ int parse_blacklist(std::string _blist_name, std::unordered_set<uint32_t> &_blac
 	return 0;
 }
 
+std::string Logger::timenow(){
+
+	std::time_t now = std::time(nullptr);
+
+	char buffer[20];
+	std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+
+	return std::string(buffer);
+}
+
 int ArgParser::verifyFlag(int _idx, int _argc, std::string errmesg){
 
 	if(_idx + 1 >= _argc){

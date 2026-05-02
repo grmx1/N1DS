@@ -51,3 +51,29 @@ int NetManager::init(){
 
 	return 0;
 }
+
+int NetManager::get_header_offset(int link_type){
+
+	int offset;
+
+	switch(link_type){
+
+		case DLT_EN10MB:
+			offset = 14;
+			break;
+
+		case DLT_LINUX_SLL:
+			offset = 16;
+			break;
+
+		case DLT_RAW:
+		case DLT_NULL:
+			offset = 0;
+			break;
+
+		default:
+			offset = 14;
+	}
+
+	return offset;
+}

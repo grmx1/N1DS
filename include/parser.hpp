@@ -55,6 +55,13 @@ void progress_bar(T idx, T start, T end, int width){
 	std::cout << "]" << std::flush;
 }
 
+class Logger{
+
+	public:
+
+	static std::string timenow();
+};
+
 class ArgParser{
 
 	public:
@@ -69,7 +76,8 @@ class ArgParser{
 	std::string help_mesg = 
 	"\nusage: n1ds [-i interface][-b blacklist-path]\n\n"
 	"       e.g n1ds -i eth0 -b /usr/share/blacklist.txt\n\n"
-	"       blacklist format must be individual, new-line separated, CIDR address ranges\n\n";
+	"       blacklist format must be individual, new-line separated, CIDR address ranges\n"
+	"       or individual ip addresses\n\n";
 
 	std::stack<std::string> errors;
 
