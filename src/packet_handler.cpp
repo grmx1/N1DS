@@ -3,9 +3,11 @@
 
 int find_ip(const std::vector<ip_r>* _blacklist_ptr, uint32_t addr){
 
+	const auto &blacklist = *_blacklist_ptr;
+
 	for(int i = 0; i < _blacklist_ptr->size(); i++){
 
-		if(addr & (*_blacklist_ptr)[i].big_e_mask == (*_blacklist_ptr)[i].big_e_net_ip){
+		if((addr & blacklist[i].big_e_mask) == blacklist[i].big_e_net_ip){
 
 			return 1;
 		}

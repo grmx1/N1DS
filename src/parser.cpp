@@ -141,7 +141,7 @@ void prefix_to_mask_insert(const prefix_ip_range &range_prefix, std::vector<ip_r
 	//convert to big endian so we reduce overhead when checking
 	//the packets
 	range.big_e_mask = htonl(mask);
-	range.big_e_net_ip = range_prefix.net_ip & mask;
+	range.big_e_net_ip = range_prefix.net_ip & range.big_e_mask;
 
 	blacklist.push_back(range);
 
