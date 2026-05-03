@@ -28,6 +28,8 @@ int main(int argc, char* argv[]){
 	NetManager nm(clargs);
 	nm.init();
 
+	RecordTracker r_track;
+
 	//black listed ip addresses
 	std::vector<ip_r> blacklist;
 
@@ -47,8 +49,9 @@ int main(int argc, char* argv[]){
 	ctx.interface = clargs.flags.interface.second;
 	ctx.link_type = linktype;
 	ctx.header_offset = nm.get_header_offset(linktype);
+	ctx.r_track_ptr = &r_track;
 
-	pcap_loop(nm.session, INF_PCAP_LOOP, pck_handler, (u_char*)&ctx);
+	pcap_loop(nm.session, INF_PCAP_LOOP, callback, (u_char*)&ctx);
 
 	return 0;
 }

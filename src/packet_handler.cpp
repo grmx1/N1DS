@@ -30,7 +30,63 @@ std::string find_proto(int proto){
 	}
 }
 
-void pck_handler(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* packet){
+uint16_t RecordTracker::get_port(iphdr* ip_info){
+
+	//this is in 32-bit words so * 4 to get
+	//iphdr length in bytes
+	int ip_header_len = ip_info->ihl * 4;
+
+	if(ip_info->protocol == IPPROTO_TCP){
+
+		struct tcphdr* tcp = (struct tcphdr*)(ip_info + ip_header_len);
+		return tcp->dest;
+	}
+	else if(ip_info->protocol == IPPROTO_UDP){
+
+		struct udphdr* udp = (struct udphdr*)(ip_info + ip_header_len);
+		return udp->dest;
+	}
+
+	return 0;
+}
+
+void RecordTracker::insert_record(iphdr* ip_info){
+
+	auto map_it = r_map.find(ip_info->saddr);
+
+	if(map_it != r_map.end()){
+
+		//move node to the end of the list
+		records.splice(records.end(), records, map_it->second);
+
+		map_it->second->proto = ip_info->protocol;
+
+		      //second is the iterator to the list
+		map_it->second->dst_record[ip_info->daddr] += 1;
+		map_it->second->ports_record[get_port(ip_info)] += 1;
+
+		map_it->second->last_seen = std::chrono::steady_clock::now();
+	}
+	else{
+
+		//create local object
+		ip_record ip_r;
+
+		ip_r.ip = ip_info->saddr;
+		ip_r.proto = ip_info->protocol;
+
+		ip_r.dst_record[ip_info->daddr] += 1;
+		ip_r.ports_record[get_port(ip_info)] += 1;
+
+		ip_r.last_seen = std::chrono::steady_clock::now();
+
+		//insert on the tracker data structures
+		records.push_back(ip_r);
+		r_map[ip_info->saddr] = --records.end();
+	}
+}
+
+void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* packet){
 
 	struct Context* ctx = reinterpret_cast<Context*>(args);
 	struct ethhdr* eth = nullptr;
@@ -43,7 +99,6 @@ void pck_handler(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* p
 		//checking for vlan to add propper offset
 		if(ntohs(eth->h_proto) == ETH_P_8021Q){
 
-			std::cout << "ARP PACKET" << std::endl;
 			ctx->header_offset = 18;
 		}
 	}
@@ -54,6 +109,24 @@ void pck_handler(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* p
 
 	std::string protocol = find_proto((int)ip->protocol);
 
+
+	//i think idc if it is ehternet at this point but maybe
+	//im wrong and this crashes something
+	std::cout << "called for insert_record" << std::endl;
+	ctx->r_track_ptr->insert_record(ip);
+
+	int tempcount = 0;
+	for(auto record : ctx->r_track_ptr->records){
+
+		struct in_addr addr;
+		addr.s_addr = record.ip;
+
+		std::cout << "Entry " << tempcount++ << std::endl;
+		std::cout << "    " << inet_ntoa(addr) << std::endl;
+		std::cout << "    " << find_proto((int)record.proto) << std::endl;
+		std::cout << std::endl;
+	}
+	/*
 	if(find_ip(ctx->blacklist_ptr, ip->saddr)){
 
 		char s_ip_str[INET_ADDRSTRLEN] = {0};
@@ -74,8 +147,11 @@ void pck_handler(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* p
 			switch(ntohs(eth->h_proto)){
 
 				case ETH_P_IP:
+
+					
 					log_mesg << "[ALERT] " + Logger::timenow() << " " << ctx->interface << " BLACKLISTED SRC: "
 						<< src << " DST: " << dst << " PROTO: " << protocol << "\n";
+					
 					break;
 				
 				case ETH_P_ARP:
@@ -94,5 +170,6 @@ void pck_handler(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* p
 
 		}
 	}
+	*/
 	std::cout << log_mesg.str();
 }
