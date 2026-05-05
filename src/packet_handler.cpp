@@ -30,6 +30,11 @@ std::string find_proto(int proto){
 	}
 }
 
+int RecordTracker::records_size(){
+
+	return records.size();
+}
+
 uint16_t RecordTracker::get_port(iphdr* ip_info){
 
 	//this is in 32-bit words so * 4 to get
@@ -50,22 +55,42 @@ uint16_t RecordTracker::get_port(iphdr* ip_info){
 	return 0;
 }
 
+void log_alert(){
+
+
+}
+
 void RecordTracker::insert_record(iphdr* ip_info){
 
+	//map iterator pointing to the list iterator that points to the ip
 	auto map_it = r_map.find(ip_info->saddr);
 
+	uint16_t port = get_port(ip_info);
+
 	if(map_it != r_map.end()){
+
+		//list iterator pointing to the ip
+		auto ip_r_ptr = map_it->second;
 
 		//move node to the end of the list
 		records.splice(records.end(), records, map_it->second);
 
-		map_it->second->proto = ip_info->protocol;
+		ip_r_ptr->proto = ip_info->protocol;
 
-		      //second is the iterator to the list
-		map_it->second->dst_record[ip_info->daddr] += 1;
-		map_it->second->ports_record[get_port(ip_info)] += 1;
+		//check for size of the internal maps to protect against
+		//flood-type attacks / scanns filling up memory without
+		//increasing records.size()
+		if(ip_r_ptr->dst_record[ip_info->daddr] < MAX_MAP_SIZE){
 
-		map_it->second->last_seen = std::chrono::steady_clock::now();
+			ip_r_ptr->dst_record[ip_info->daddr] += 1;
+		}
+
+		if(ip_r_ptr->ports_record[port] < MAX_MAP_SIZE){
+
+			ip_r_ptr->ports_record[port] += 1;
+		}
+
+		ip_r_ptr->last_seen = std::chrono::steady_clock::now();
 	}
 	else{
 
@@ -82,7 +107,30 @@ void RecordTracker::insert_record(iphdr* ip_info){
 
 		//insert on the tracker data structures
 		records.push_back(ip_r);
-		r_map[ip_info->saddr] = --records.end();
+		r_map[ip_r.ip] = --records.end();
+	}
+
+}
+
+void RecordTracker::update_records(){
+
+	auto time_now = std::chrono::steady_clock::now();
+
+	bool old_pck = true;
+
+	while(!records.empty() && old_pck){
+
+		auto duration = time_now - records.front().last_seen;
+		auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(duration);
+
+		if(std::chrono::duration<double>(elapsed_sec).count() > 5.0){
+
+			r_map.erase(records.front().ip);
+			records.pop_front();
+		}
+		else{
+			old_pck = false;
+		}
 	}
 }
 
@@ -109,14 +157,20 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 	std::string protocol = find_proto((int)ip->protocol);
 
-
 	//i think idc if it is ehternet at this point but maybe
 	//im wrong and this crashes something
-	std::cout << "called for insert_record" << std::endl;
 	ctx->r_track_ptr->insert_record(ip);
+	if(ctx->r_track_ptr->records_size() >= MAX_PCK_RECORD){
 
+		ctx->r_track_ptr->update_records();
+	}
+/*
 	int tempcount = 0;
 	for(auto record : ctx->r_track_ptr->records){
+
+		auto time_now = std::chrono::steady_clock::now();
+		auto duration = time_now - record.last_seen;
+		auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(duration);
 
 		struct in_addr addr;
 		addr.s_addr = record.ip;
@@ -124,6 +178,8 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 		std::cout << "Entry " << tempcount++ << std::endl;
 		std::cout << "    " << inet_ntoa(addr) << std::endl;
 		std::cout << "    " << find_proto((int)record.proto) << std::endl;
+		std::cout << "    " << "sec: " << std::chrono::duration<double>(elapsed_sec).count() << std::endl;
+		std::cout << "    " << "records size -> " << ctx->r_track_ptr->records.size();
 		std::cout << std::endl;
 	}
 	/*

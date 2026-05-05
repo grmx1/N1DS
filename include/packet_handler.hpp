@@ -13,11 +13,19 @@
 
 #include "parser.hpp"
 
+//max sizes
+#define MAX_PCK_RECORD 5e4 //50k items before update
+#define MAX_MAP_SIZE 500
+
+//log codes
+#define LOG_ARP_SCAN
+#define LOG_ARP_POIS
+
+
 class RecordTracker;
 struct Context{
 
 	std::vector<ip_r>* blacklist_ptr;
-	std::ofstream* logf;
 	std::string interface;
 	int link_type;
 	int header_offset;
@@ -47,10 +55,12 @@ class RecordTracker{
 
 	public:
 
+	std::ofsteam &logf;
+
 	void insert_record(iphdr* ip_info);
 	void update_records();
 
-	std::list<ip_record> records; //TEMPORARILY MAKING THIS PUBLIC FOR TESTING MAKE PRIVATE AFTER ( ill forget ab this for 20 pushes )
+	int records_size();
 
 	private:
 
@@ -59,8 +69,9 @@ class RecordTracker{
 	void log_alert();
 	void log_notice();
 
-	//std::list<ip_record> records;
+	std::list<ip_record> records;
 	std::unordered_map<uint32_t, std::list<ip_record>::iterator> r_map;
+
 };
 
 void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* packet);

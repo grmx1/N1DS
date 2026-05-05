@@ -29,6 +29,7 @@ int main(int argc, char* argv[]){
 	nm.init();
 
 	RecordTracker r_track;
+	r_track.logf = logfile;
 
 	//black listed ip addresses
 	std::vector<ip_r> blacklist;
@@ -45,7 +46,6 @@ int main(int argc, char* argv[]){
 
 	Context ctx;
 	ctx.blacklist_ptr = &blacklist;
-	ctx.logf = &logfile;
 	ctx.interface = clargs.flags.interface.second;
 	ctx.link_type = linktype;
 	ctx.header_offset = nm.get_header_offset(linktype);
