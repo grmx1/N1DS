@@ -1,13 +1,11 @@
 #include "packet_handler.hpp"
 #include <iostream>
 
-int find_ip(const std::vector<ip_r>* _blacklist_ptr, uint32_t addr){
+int find_ip(const std::vector<ip_range> &_blacklist, uint32_t addr){
 
-	const auto &blacklist = *_blacklist_ptr;
+	for(int i = 0; i < _blacklist.size(); i++){
 
-	for(int i = 0; i < _blacklist_ptr->size(); i++){
-
-		if((addr & blacklist[i].big_e_mask) == blacklist[i].big_e_net_ip){
+		if((addr & _blacklist[i].big_e_mask) == _blacklist[i].big_e_net_ip){
 
 			return 1;
 		}
@@ -55,16 +53,91 @@ uint16_t RecordTracker::get_port(iphdr* ip_info){
 	return 0;
 }
 
-void log_alert(){
+void RecordTracker::eval_ip_record(ip_record &ip_rec, std::array<int, LOG_IP_SIZE> &log_data){
+
+	uint32_t dst_ip = ip_rec.dst_ip;
+	uint16_t dst_port = ip_rec.dst_port;
+
+	int vscan_count = ip_rec.dst_record[dst_ip][dst_port];
+	int hscan_count = ip_rec.ports_record[dst_port][dst_ip];
+
+	bool flood_proto = (ip_rec.proto == UDP || ip_rec.proto == ICMP);
+
+	//blackisted ip
+	if(find_ip(blacklist, ip_rec.ip)){
+
+		log_data[LOG_BLK_ADDR] = ALERT;
+	}
+
+	//vertical scan
+	if(vscan_count > MAX_VSCAN_CRI){
+
+		log_data[LOG_IP_VSCAN] = CRITICAL;
+	}
+	else if(vscan_count > MAX_VSCAN_ALR){
+
+		log_data[LOG_IP_VSCAN] = ALERT;
+	}
+	else if(vscan_count > MAX_VSCAN_NOT){
+
+		log_data[LOG_IP_VSCAN] = NOTICE;
+	}
+	else{
+
+		log_data[LOG_IP_VSCAN] = NONE;
+	}
+
+	//horizontal scan
+	if(hscan_count > MAX_HSCAN_CRI){
+
+		log_data[LOG_IP_HSCAN] = CRITICAL;
+	}
+	else if(hscan_count > MAX_HSCAN_ALR){
+
+		log_data[LOG_IP_HSCAN] = ALERT;
+	}
+	else if(hscan_count > MAX_HSCAN_NOT){
+
+		log_data[LOG_IP_HSCAN] = NOTICE;
+	}
+	else{
+
+		log_data[LOG_IP_HSCAN] = NONE;
+	}
+
+	//flood attack
+	if(!ip_rec.fld_notice && ip_rec.flood_tracker > MAX_FLOOD_NOT && flood_proto){
+
+		log_data[LOG_FLOOD_AT] = NOTICE;
+		ip_rec.fld_notice = true;
+	}
+	else if(!ip_rec.fld_alert && ip_rec.flood_tracker > MAX_FLOOD_ALR && flood_proto){
+
+		log_data[LOG_FLOOD_AT] = ALERT;
+		ip_rec.fld_alert = true;
+	}
+	else if(ip_rec.flood_tracker > MAX_FLOOD_ALR && flood_proto){
+
+		log_data[LOG_FLOOD_AT] = ALERT;
+		ip_rec.flood_tracker = 0;
+	}
+	else{
+		log_data[LOG_FLOOD_AT] = NONE;
+	}
+};
+
+void log_info(){
 
 
-}
+};
 
 void RecordTracker::insert_record(iphdr* ip_info){
 
 	//map iterator pointing to the list iterator that points to the ip
 	auto map_it = r_map.find(ip_info->saddr);
 
+	uint32_t s_addr = ip_info->saddr;
+	uint32_t d_addr = ip_info->daddr;
 	uint16_t port = get_port(ip_info);
 
 	if(map_it != r_map.end()){
@@ -75,19 +148,23 @@ void RecordTracker::insert_record(iphdr* ip_info){
 		//move node to the end of the list
 		records.splice(records.end(), records, map_it->second);
 
+		ip_r_ptr->dst_ip = s_addr;
+		ip_r_ptr->dst_port = port;
 		ip_r_ptr->proto = ip_info->protocol;
+
+		ip_r_ptr->flood_tracker += 1;
 
 		//check for size of the internal maps to protect against
 		//flood-type attacks / scanns filling up memory without
 		//increasing records.size()
-		if(ip_r_ptr->dst_record[ip_info->daddr] < MAX_MAP_SIZE){
+		if(ip_r_ptr->dst_record[d_addr][port] < MAX_MAP_SIZE){
 
-			ip_r_ptr->dst_record[ip_info->daddr] += 1;
+			ip_r_ptr->dst_record[d_addr][port] += 1;
 		}
 
-		if(ip_r_ptr->ports_record[port] < MAX_MAP_SIZE){
+		if(ip_r_ptr->ports_record[port][d_addr] < MAX_MAP_SIZE){
 
-			ip_r_ptr->ports_record[port] += 1;
+			ip_r_ptr->ports_record[port][d_addr] += 1;
 		}
 
 		ip_r_ptr->last_seen = std::chrono::steady_clock::now();
@@ -97,41 +174,66 @@ void RecordTracker::insert_record(iphdr* ip_info){
 		//create local object
 		ip_record ip_r;
 
-		ip_r.ip = ip_info->saddr;
+		ip_r.ip = s_addr;
+		ip_r.dst_ip = d_addr;
+		ip_r.dst_port = port;
 		ip_r.proto = ip_info->protocol;
 
-		ip_r.dst_record[ip_info->daddr] += 1;
-		ip_r.ports_record[get_port(ip_info)] += 1;
+		ip_r.flood_tracker = 1;
+		ip_r.fld_notice = false;
+		ip_r.fld_alert = false;
+
+		ip_r.dst_record[d_addr][port] += 1;
+		ip_r.ports_record[port][d_addr] += 1;
 
 		ip_r.last_seen = std::chrono::steady_clock::now();
 
 		//insert on the tracker data structures
 		records.push_back(ip_r);
 		r_map[ip_r.ip] = --records.end();
+
+		rec_size += 1;
 	}
 
 }
 
 void RecordTracker::update_records(){
 
+	static int packet_counter = 0;
+	static auto time_last_cleanup = std::chrono::steady_clock::now();
+
 	auto time_now = std::chrono::steady_clock::now();
+	packet_counter++;
 
 	bool old_pck = true;
 
-	while(!records.empty() && old_pck){
+	//trigger the cleanup if we have processed 1000+ packages or if more than 1s has passed
+	if(packet_counter >= 1000 || (time_now - time_last_cleanup) >= std::chrono::seconds(1)){
 
-		auto duration = time_now - records.front().last_seen;
-		auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(duration);
+		while(!records.empty() && old_pck){
 
-		if(std::chrono::duration<double>(elapsed_sec).count() > 5.0){
+			auto last_seen_duration = time_now - records.front().last_seen;
+			auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(last_seen_duration);
 
-			r_map.erase(records.front().ip);
-			records.pop_front();
+			if(std::chrono::duration<double>(elapsed_sec).count() > 5.0 || rec_size > MAX_REC_SIZE){
+
+				r_map.erase(records.front().ip);
+				records.pop_front();
+			}
+			else{
+				old_pck = false;
+			}
 		}
-		else{
-			old_pck = false;
-		}
+
+		time_last_cleanup = time_now;
+		packet_counter = 0;
 	}
+}
+
+//i use initializer list because references cant be reassigned
+RecordTracker::RecordTracker(std::ofstream &logfile, std::vector<ip_range> &_blacklist) : logf(logfile), blacklist(_blacklist) {
+
+	rec_size = 0;
 }
 
 void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* packet){
@@ -160,10 +262,7 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 	//i think idc if it is ehternet at this point but maybe
 	//im wrong and this crashes something
 	ctx->r_track_ptr->insert_record(ip);
-	if(ctx->r_track_ptr->records_size() >= MAX_PCK_RECORD){
-
-		ctx->r_track_ptr->update_records();
-	}
+	ctx->r_track_ptr->update_records(); //internaly checks if it actually has to update the records
 /*
 	int tempcount = 0;
 	for(auto record : ctx->r_track_ptr->records){

@@ -117,9 +117,9 @@ int validate_line_syx(std::string _line, std::vector<prefix_ip_range> &ranges_ve
 	return return_error;
 };
 
-void prefix_to_mask_insert(const prefix_ip_range &range_prefix, std::vector<ip_r> &blacklist){
+void prefix_to_mask_insert(const prefix_ip_range &range_prefix, std::vector<ip_range> &blacklist){
 
-	struct ip_r range;
+	struct ip_range range;
 	struct in_addr info_addr;
 
 	uint32_t mask;
@@ -150,7 +150,7 @@ void prefix_to_mask_insert(const prefix_ip_range &range_prefix, std::vector<ip_r
 
 }
 
-int parse_blacklist(std::string _blist_name, std::vector<ip_r> &_blacklist){
+int parse_blacklist(std::string _blist_name, std::vector<ip_range> &_blacklist){
 
 	std::string line;
 	std::vector<prefix_ip_range> ranges;

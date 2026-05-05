@@ -28,11 +28,10 @@ int main(int argc, char* argv[]){
 	NetManager nm(clargs);
 	nm.init();
 
-	RecordTracker r_track;
-	r_track.logf = logfile;
-
 	//black listed ip addresses
-	std::vector<ip_r> blacklist;
+	std::vector<ip_range> blacklist;
+
+	RecordTracker r_track(logfile, blacklist);
 
 	int validate_bl = parse_blacklist(clargs.flags.blist_name.second, blacklist);
 
@@ -45,7 +44,6 @@ int main(int argc, char* argv[]){
 	int linktype = pcap_datalink(nm.session);
 
 	Context ctx;
-	ctx.blacklist_ptr = &blacklist;
 	ctx.interface = clargs.flags.interface.second;
 	ctx.link_type = linktype;
 	ctx.header_offset = nm.get_header_offset(linktype);

@@ -24,7 +24,7 @@ struct prefix_ip_range{
 	uint32_t net_ip;
 };
 
-struct ip_r{
+struct ip_range{
 
 	uint32_t big_e_net_ip;
 	uint32_t big_e_mask;
@@ -33,7 +33,7 @@ struct ip_r{
 //int validate_line(std::string _line, prefix_ip_range &_range);
 int validate_line_syx(std::string _line, std::vector<prefix_ip_range> &ranges_vector);
 void insert_addrs_from_range(const prefix_ip_range &range, std::unordered_set<uint32_t> &blacklist);
-int parse_blacklist(std::string _blist_name, std::vector<ip_r> &_blacklist);
+int parse_blacklist(std::string _blist_name, std::vector<ip_range> &_blacklist);
 
 
 template<typename T>
