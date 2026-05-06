@@ -82,9 +82,9 @@ struct ip_record{
 	int flood_tracker_total;
 
 	                  //ip                           //port    //count
-	std::unordered_map<uint32_t, std::unordered_map<uint16_t, int>> dst_record;
+	std::unordered_map<uint32_t, std::unordered_set<uint16_t>> dst_record;
 	                  //port                         //ip      //count
-	std::unordered_map<uint16_t, std::unordered_map<uint32_t, int>> ports_record;
+	std::unordered_map<uint16_t, std::unordered_set<uint32_t>> ports_record;
 	
 	std::chrono::steady_clock::time_point last_seen;
 
@@ -126,7 +126,7 @@ class RecordTracker{
 
 	private:
 
-	uint16_t get_port(iphdr* ip_info);
+	uint16_t get_port(iphdr* ip_bytes);
 
 	std::list<ip_record> records;
 	std::unordered_map<uint32_t, std::list<ip_record>::iterator> r_map;

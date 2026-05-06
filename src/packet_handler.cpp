@@ -33,20 +33,22 @@ int RecordTracker::records_size(){
 	return records.size();
 }
 
-uint16_t RecordTracker::get_port(iphdr* ip_info){
+uint16_t RecordTracker::get_port(iphdr* ip_bytes){
 
 	//this is in 32-bit words so * 4 to get
 	//iphdr length in bytes
-	int ip_header_len = ip_info->ihl * 4;
+	int ip_header_len = ip_bytes->ihl * 4;
 
-	if(ip_info->protocol == IPPROTO_TCP){
+	if(ip_bytes->protocol == IPPROTO_TCP){
 
-		struct tcphdr* tcp = (struct tcphdr*)(ip_info + ip_header_len);
+		//                                   casting to a 1 byte primitive
+		//                                   for pointer arithmetic
+		struct tcphdr* tcp = (struct tcphdr*)((char*)ip_bytes + ip_header_len);
 		return tcp->dest;
 	}
-	else if(ip_info->protocol == IPPROTO_UDP){
+	else if(ip_bytes->protocol == IPPROTO_UDP){
 
-		struct udphdr* udp = (struct udphdr*)(ip_info + ip_header_len);
+		struct udphdr* udp = (struct udphdr*)((char*)ip_bytes + ip_header_len);
 		return udp->dest;
 	}
 
@@ -180,7 +182,7 @@ std::string ip_record::build_log(int log_code, sv log_level, sv _msg_str, sv _sr
 
 			log << "\n" << "[" << log_level << "] " << Logger::timenow() << _msg_str <<
 			" SRC: " << _src_str << " DST: " << _dst_str << " PROTO: " << _proto_str <<
-			" ON " << dst_record[dst_ip].size() << " PORTS";
+			" DPORT: " << ntohs(dst_port) << " ON " << dst_record[dst_ip].size() << " PORTS";
 			break;
 
 		case LOG_IP_HSCAN:
@@ -218,7 +220,7 @@ void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
 	//buffer for formatted presentaton ip/msg
 	char src_str[32];
 	char dst_str[32];
-	char msg_str[64];
+	char msg_str[128];
 
 	//format it to a fixed size
 	snprintf(src_str, sizeof(src_str), "%-15s", s_ip_str_buf);
@@ -243,6 +245,7 @@ void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
 		temp_msg = get_mesg(LOG_BLK_ADDR);
 		snprintf(msg_str, sizeof(msg_str), "%-15s", temp_msg);
 
+		//aqui ya esta mal TODO
 		log_mesgs.push_back(build_log(log_code, log_levels[log_data[log_code]], temp_msg.c_str(), src_str, dst_str, proto_str));
 	}
 	if(log_data[LOG_IP_VSCAN]){
@@ -294,24 +297,14 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 		//move node to the end of the list
 		records.splice(records.end(), records, ip_rec);
 
-		ip_rec->dst_ip = s_addr;
+		ip_rec->dst_ip = d_addr;
 		ip_rec->dst_port = port;
 		ip_rec->proto = ip_info->protocol;
 
 		ip_rec->flood_tracker_total += 1;
 
-		//check for size of the internal maps to protect against
-		//flood-type attacks / scanns filling up memory without
-		//increasing records.size()
-		if(ip_rec->dst_record[d_addr][port] < MAX_MAP_SIZE){
-
-			ip_rec->dst_record[d_addr][port] += 1;
-		}
-
-		if(ip_rec->ports_record[port][d_addr] < MAX_MAP_SIZE){
-
-			ip_rec->ports_record[port][d_addr] += 1;
-		}
+		ip_rec->dst_record[d_addr].insert(port);
+		ip_rec->ports_record[port].insert(d_addr);
 
 		ip_rec->last_seen = std::chrono::steady_clock::now();
 
@@ -329,8 +322,8 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 
 		ip_r.flood_tracker_total = 0;
 
-		ip_r.dst_record[d_addr][port] += 1;
-		ip_r.ports_record[port][d_addr] += 1;
+		ip_r.dst_record[d_addr].insert(port);
+		ip_r.ports_record[port].insert(d_addr);
 
 		ip_r.last_seen = std::chrono::steady_clock::now();
 
@@ -405,7 +398,7 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 	}
 
 	//if this is ipv4
-	if(eth && ntohs(eth->h_proto) == ETH_P_IP){
+	if(ntohs(eth->h_proto) == ETH_P_IP){
 
 		struct iphdr* ip = (struct iphdr*)(packet + ctx->header_offset);
 
