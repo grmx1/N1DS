@@ -85,7 +85,7 @@ struct ip_record{
 	std::unordered_map<uint32_t, std::unordered_set<uint16_t>> dst_record;
 	                  //port                         //ip      //count
 	std::unordered_map<uint16_t, std::unordered_set<uint32_t>> ports_record;
-	
+
 	std::chrono::steady_clock::time_point last_seen;
 
 	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data);
@@ -114,6 +114,7 @@ class RecordTracker{
 
 	std::ofstream &logf;
 	std::vector<ip_range> &blacklist;
+	std::unordered_set<uint16_t> tracked_ports;
 
 	ip_record& insert_record(iphdr* ip_info);
 

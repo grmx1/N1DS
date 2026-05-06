@@ -288,6 +288,7 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 	uint32_t s_addr = ip_info->saddr;
 	uint32_t d_addr = ip_info->daddr;
 	uint16_t port = get_port(ip_info);
+	uint16_t hs_port = ntohs(port);
 
 	if(map_it != r_map.end()){
 
@@ -303,7 +304,11 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 
 		ip_rec->flood_tracker_total += 1;
 
-		ip_rec->dst_record[d_addr].insert(port);
+		//check only for system ports to prevent false positives
+		if(hs_port < 1024 || tracked_ports.find(hs_port) != tracked_ports.end()){
+
+			ip_rec->dst_record[d_addr].insert(port);
+		}
 		ip_rec->ports_record[port].insert(d_addr);
 
 		ip_rec->last_seen = std::chrono::steady_clock::now();
@@ -375,9 +380,23 @@ void RecordTracker::update_records(){
 }
 
 //i use initializer list because references cant be reassigned
-RecordTracker::RecordTracker(std::ofstream &logfile, std::vector<ip_range> &_blacklist) : logf(logfile), blacklist(_blacklist) {
+RecordTracker::RecordTracker(std::ofstream &logfile, std::vector<ip_range> &_blacklist) : 
+	logf(logfile),
+	blacklist(_blacklist),
+	tracked_ports({
+
+		//databases
+		3306, 5432, 6379, 27017, 1433, 1434,
+		//remote access
+		3389, 5900, 5901, 5902, 5903, 8080, 8443,
+		//Development
+		2375, 2376, 9000, 9200, 9300, 8000, 8888,
+		//Internal services
+		2049, 5000, 111
+	}){
 
 	rec_size = 0;
+
 }
 
 void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* packet){
