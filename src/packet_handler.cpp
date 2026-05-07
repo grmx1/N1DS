@@ -33,34 +33,14 @@ int RecordTracker::records_size(){
 	return records.size();
 }
 
-uint16_t RecordTracker::get_port(iphdr* ip_bytes){
-
-	//this is in 32-bit words so * 4 to get
-	//iphdr length in bytes
-	int ip_header_len = ip_bytes->ihl * 4;
-
-	if(ip_bytes->protocol == IPPROTO_TCP){
-
-		//                                   casting to a 1 byte primitive
-		//                                   for pointer arithmetic
-		struct tcphdr* tcp = (struct tcphdr*)((char*)ip_bytes + ip_header_len);
-		return tcp->dest;
-	}
-	else if(ip_bytes->protocol == IPPROTO_UDP){
-
-		struct udphdr* udp = (struct udphdr*)((char*)ip_bytes + ip_header_len);
-		return udp->dest;
-	}
-
-	return 0;
-}
-
-void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data){
+//maybe not need tcphdr and udphdr here
+void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data, tcphdr* tcp_info, udphdr* udp_info){
 
 	//use this static values to not fill the logs once
 	//it has been logged that a scan or flood attack is happening
-	static int flood_tracker = 0;
-	static int flood_alert = 0;
+	static int syn_flood_alert = 0;
+	static int syn_ack_flood_alert = 0;
+	static int unv_flood_alert = 0;
 	static int vscan_alert = 0;
 	static int hscan_alert = 0;
 
@@ -123,33 +103,73 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 		hscan_alert = 0;
 	}
 
-	//flood attack
-	if(flood_tracker > MAX_FLOOD_CRI && flood_proto && flood_alert < 3){
+	//SYN flood attack
+	if(syn_count > MAX_FLOOD_CRI && flood_proto && syn_flood_alert < 3){
 
 		log_data[LOG_FLOOD_AT] = CRITICAL;
-		flood_alert = 2;
-		flood_tracker = 0;
+		syn_flood_alert = 2;
+		syn_count = 0;
 
 		//i reset the package counter but set the alert
 		//flag to 2 so if the log stays on the tracked
 		//it will only notify again after another MAX_FLOOD_CRI
 		//amount of packages
 	}
-	else if(flood_tracker > MAX_FLOOD_ALR && flood_proto && flood_alert < 2){
+	else if(syn_count > MAX_FLOOD_ALR && flood_proto && syn_flood_alert < 2){
 
 		log_data[LOG_FLOOD_AT] = ALERT;
-		flood_alert = 2;
+		syn_flood_alert = 2;
 	}
-	else if(flood_tracker > MAX_FLOOD_NOT && flood_proto && flood_alert < 1){
+	else if(syn_count > MAX_FLOOD_NOT && flood_proto && syn_flood_alert < 1){
 
 		log_data[LOG_FLOOD_AT] = NOTICE;
-		flood_alert = 1;
+		syn_flood_alert = 1;
 	}
 	else{
 		log_data[LOG_FLOOD_AT] = NONE;
 	}
 
-	flood_tracker += 1;
+	//SYN+ACK flood attack
+	if(syn_ack_count > MAX_FLOOD_CRI && flood_proto && syn_ack_flood_alert < 3){
+
+		log_data[LOG_FLOOD_AT] = CRITICAL;
+		syn_ack_flood_alert = 2;
+		syn_ack_count = 0;
+	}
+	else if(syn_ack_count > MAX_FLOOD_ALR && flood_proto && syn_ack_flood_alert < 2){
+
+		log_data[LOG_FLOOD_AT] = ALERT;
+		syn_ack_flood_alert = 2;
+	}
+	else if(syn_ack_count > MAX_FLOOD_NOT && flood_proto && syn_ack_flood_alert < 1){
+
+		log_data[LOG_FLOOD_AT] = NOTICE;
+		syn_ack_flood_alert = 1;
+	}
+	else{
+		log_data[LOG_FLOOD_AT] = NONE;
+	}
+
+	//UNVERIFIED flood attack
+	if(unv_count > MAX_FLOOD_CRI && flood_proto && unv_flood_alert < 3){
+
+		log_data[LOG_FLOOD_AT] = CRITICAL;
+		unv_flood_alert = 2;
+		unv_count = 0;
+	}
+	else if(unv_count > MAX_FLOOD_ALR && flood_proto && unv_flood_alert < 2){
+
+		log_data[LOG_FLOOD_AT] = ALERT;
+		unv_flood_alert = 2;
+	}
+	else if(unv_count > MAX_FLOOD_NOT && flood_proto && unv_flood_alert < 1){
+
+		log_data[LOG_FLOOD_AT] = NOTICE;
+		unv_flood_alert = 1;
+	}
+	else{
+		log_data[LOG_FLOOD_AT] = NONE;
+	}
 };
 
 std::string_view ip_record::get_mesg(int log_code){
@@ -196,7 +216,7 @@ std::string ip_record::build_log(int log_code, sv log_level, sv _msg_str, sv _sr
 
 			log << "\n" << "[" << log_level << "] " << Logger::timenow() << _msg_str <<
 			" SRC: " << _src_str << " DST: " << _dst_str << " PROTO: " << _proto_str <<
-			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << flood_tracker_total;
+			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << flood_count;
 			break;
 
 	}
@@ -204,6 +224,36 @@ std::string ip_record::build_log(int log_code, sv log_level, sv _msg_str, sv _sr
 	return log.str();
 }
 
+void RecordTracker::print_conn_table(){
+
+	std::array<std::string, 3> status_str = {"UNVERIFIED", "SYN_OPEN", "VERIFIED"};
+
+	char d_ip_str_buf[INET_ADDRSTRLEN];
+	char s_ip_str_buf[INET_ADDRSTRLEN];
+
+	//buffer for formatted presentaton ip/msg
+	char src_str[32];
+	char dst_str[32];
+
+	for(auto src : conn_table){
+
+		inet_ntop(AF_INET, &src.first, s_ip_str_buf, INET_ADDRSTRLEN);
+		snprintf(src_str, sizeof(src_str), "%-15s", s_ip_str_buf);
+
+		std::cout << src_str << " connections: " << std::endl;
+
+		for(auto dst : src.second){
+
+			inet_ntop(AF_INET, &dst.first, d_ip_str_buf, INET_ADDRSTRLEN);
+			snprintf(dst_str, sizeof(dst_str), "%-15s", d_ip_str_buf);
+
+			std::cout << "\n" << "    " << dst_str << " -- state -> " << status_str[static_cast<int>(dst.second)];
+		}
+
+		std::cout << std::endl << std::endl;
+	}
+
+}
 
 void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
 
@@ -270,52 +320,89 @@ void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
 		temp_msg = get_mesg(LOG_FLOOD_AT);
 		snprintf(msg_str, sizeof(msg_str), "%-15s", temp_msg);
 
-		log_mesgs.push_back(build_log(log_code, log_levels[log_data[log_code]], temp_msg.c_str(), src_str, dst_str, proto_str, flood_tracker_total));
+		//VERY IMPORTANT
+		//i have to create new entries on this if statement
+		//to account for different flood types of attacks as
+		//now im sending the flood counter as SYN
+		log_mesgs.push_back(build_log(log_code, log_levels[log_data[log_code]], temp_msg.c_str(), src_str, dst_str, proto_str, syn_count));
 	}
 
 	for(auto log : log_mesgs){
 
 		std::cout << log;
 	}
-
 };
 
-ip_record& RecordTracker::insert_record(iphdr* ip_info){
+int RecordTracker::is_waiting(uint32_t src, uint32_t dst){
+
+	if(conn_table.count(dst) && conn_table[dst].count(src)){
+
+		return 1;
+	}
+
+	return 0;
+}
+
+int RecordTracker::is_verified(uint32_t src, uint32_t dst){
+
+	if(conn_table.count(src) && conn_table[src].count(dst)){
+
+		return conn_table[src][dst] == TCPSTATE::VERIFIED;
+	}
+	else if(conn_table.count(dst) && conn_table[dst].count(src)){
+
+		return conn_table[dst][src] == TCPSTATE::VERIFIED;
+	}
+
+	return 0;
+}
+
+void RecordTracker::remove_conn(uint32_t src, uint32_t dst){
+
+	if(conn_table.count(src) && conn_table[src].count(dst)){
+
+		conn_table[src].erase(dst);
+
+		if(conn_table[src].size() == 0){
+
+			conn_table.erase(src);
+		}
+	}
+	else if(conn_table.count(dst) && conn_table[dst].count(src)){
+
+		conn_table[dst].erase(src);
+
+		if(conn_table[dst].size() == 0){
+
+			conn_table.erase(dst);
+		}
+	}
+}
+
+ip_record& RecordTracker::insert_record(iphdr* ip_info, tcphdr* tcp_info, udphdr* udp_info){
 
 	//map iterator pointing to the list iterator that points to the ip
 	auto map_it = r_map.find(ip_info->saddr);
+	bool existing = (map_it != r_map.end());
 
 	uint32_t s_addr = ip_info->saddr;
 	uint32_t d_addr = ip_info->daddr;
-	uint16_t port = get_port(ip_info);
+	uint16_t port = 0;
+	uint8_t flags = 0;
+
+	if(tcp_info){
+
+		port = tcp_info->dest;
+		flags = tcp_info->th_flags;
+	}
+	else if(udp_info){
+
+		port = udp_info->dest;
+	}
+
 	uint16_t hs_port = ntohs(port);
 
-	if(map_it != r_map.end()){
-
-		//list iterator pointing to the ip
-		auto ip_rec = map_it->second;
-
-		//move node to the end of the list
-		records.splice(records.end(), records, ip_rec);
-
-		ip_rec->dst_ip = d_addr;
-		ip_rec->dst_port = port;
-		ip_rec->proto = ip_info->protocol;
-
-		ip_rec->flood_tracker_total += 1;
-
-		//check only for system ports to prevent false positives
-		if(hs_port < 1024 || tracked_ports.find(hs_port) != tracked_ports.end()){
-
-			ip_rec->dst_record[d_addr].insert(port);
-		}
-		ip_rec->ports_record[port].insert(d_addr);
-
-		ip_rec->last_seen = std::chrono::steady_clock::now();
-
-		return *ip_rec;
-	}
-	else{
+	if(existing == false){
 
 		//create local object
 		ip_record ip_r;
@@ -325,7 +412,11 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 		ip_r.dst_port = port;
 		ip_r.proto = ip_info->protocol;
 
-		ip_r.flood_tracker_total = 0;
+		//do i initialize this as 0 ?
+		ip_r.syn_count = 0;
+		ip_r.unv_count = 0;
+		ip_r.syn_ack_count = 0;
+		//ip_r.flood_tracker_total = 0;
 
 		ip_r.dst_record[d_addr].insert(port);
 		ip_r.ports_record[port].insert(d_addr);
@@ -335,13 +426,86 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info){
 		//insert on the tracker data structures
 		records.push_back(ip_r);
 
-		auto new_iterator = --records.end();
-		r_map[ip_r.ip] = new_iterator;
+		auto new_list_iterator = --records.end();
+		auto result = r_map.insert({ip_r.ip, new_list_iterator});
+
+		map_it = result.first;
 
 		rec_size += 1;
-
-		return *new_iterator;
 	}
+
+	//list iterator pointing to the ip
+	auto ip_rec = map_it->second;
+
+	if(existing){
+
+		//move node to the end of the list
+		records.splice(records.end(), records, ip_rec);
+	}
+
+	ip_rec->dst_ip = d_addr;
+	ip_rec->dst_port = port;
+	ip_rec->proto = ip_info->protocol;
+
+	//ip_rec->flood_tracker_total += 1;
+
+	//check only for system ports to prevent false positives
+	if(hs_port < 1024 || tracked_ports.count(hs_port)){
+
+		ip_rec->dst_record[d_addr].insert(port);
+	}
+	ip_rec->ports_record[port].insert(d_addr);
+
+	//check for flags
+	if((flags & TH_SYN) && !(flags & TH_ACK)){
+
+		//we register that s_addr is waiting
+		//for SYN ACK from d_addr
+
+		//prevent SYN flood from filling up memory
+		if(conn_table[s_addr].size() < 500){
+
+			conn_table[s_addr][d_addr] = TCPSTATE::SYN_OPEN;
+		}
+
+		ip_rec->syn_count += 1;
+	}
+	else if((flags & TH_SYN) && (flags & TH_ACK)){
+
+		//if it is SYN+ACK we look in the list
+		//if d_addr is waiting for such connection
+		if(is_waiting(s_addr, d_addr)){
+
+			//update state
+			conn_table[d_addr][s_addr] = TCPSTATE::VERIFIED;
+
+			//reset counters for both addr
+			ip_rec->syn_count = 0;
+			ip_rec->unv_count = 0;
+			ip_rec->syn_ack_count = 0;
+
+			r_map[d_addr]->syn_count = 0;
+			r_map[d_addr]->unv_count = 0;
+			r_map[d_addr]->syn_ack_count = 0;
+
+		}
+		else{
+			ip_rec->syn_ack_count += 1;
+		}
+	}
+	else if(!is_verified(s_addr, d_addr)){ // i should also check for this on new records
+
+		ip_rec->unv_count += 1;
+	}
+
+	if((flags & TH_RST) || (flags & TH_FIN)){
+
+		remove_conn(s_addr, d_addr);
+	}
+
+	ip_rec->last_seen = std::chrono::steady_clock::now();
+
+	return *ip_rec;
 
 }
 
@@ -421,6 +585,26 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 		struct iphdr* ip = (struct iphdr*)(packet + ctx->header_offset);
 
+		struct tcphdr* tcp = nullptr;
+		struct udphdr* udp = nullptr;
+
+		uint16_t port = 0;
+
+		//ts is in 32bit words * 4 to get bytes
+		int ip_hdr_length = ip->ihl * 4;
+
+		if(ip->protocol == IPPROTO_TCP){
+
+			tcp = (struct tcphdr*)((char*)ip + ip_hdr_length);
+			port = tcp->dest;
+		}
+		else if(ip){
+
+			udp = (struct udphdr*)((char*)ip + ip_hdr_length);
+			port = udp->dest;
+		}
+
+
 		std::stringstream log_mesg;
 
 		std::string protocol = find_proto((int)ip->protocol);
@@ -429,10 +613,11 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 		//i think idc if it is ehternet at this point but maybe
 		//im wrong and this crashes something
-		ip_record &ip_rec = ctx->r_track_ptr->insert_record(ip);
+		ip_record &ip_rec = ctx->r_track_ptr->insert_record(ip, tcp, udp);
 
-		ip_rec.eval_ip_record(ctx->r_track_ptr->blacklist, log_data);
-		ip_rec.log_ip_record(log_data);
+		ip_rec.eval_ip_record(ctx->r_track_ptr->blacklist, log_data, tcp, udp);
+		//ip_rec.log_ip_record(log_data);
+		ctx->r_track_ptr->print_conn_table();
 		ctx->r_track_ptr->update_records(); //internaly checks if it actually has to update the records
 	}
 

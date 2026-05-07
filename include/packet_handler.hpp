@@ -72,6 +72,13 @@ struct Context{
 //them as long as their last seen is less
 //than 5s ago
 
+enum class TCPSTATE {
+
+	UNVERIFIED,
+	SYN_OPEN,
+	VERIFIED
+};
+
 struct ip_record{
 
 	uint32_t ip;
@@ -79,7 +86,10 @@ struct ip_record{
 	uint16_t dst_port;
 	uint8_t proto;
 
-	int flood_tracker_total;
+	int syn_count;
+	int unv_count;
+	int syn_ack_count;
+	//int flood_tracker_total;
 
 	                  //ip                           //port    //count
 	std::unordered_map<uint32_t, std::unordered_set<uint16_t>> dst_record;
@@ -88,7 +98,7 @@ struct ip_record{
 
 	std::chrono::steady_clock::time_point last_seen;
 
-	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data);
+	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data, tcphdr* tcp_info, udphdr* udp_info);
 	void log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data);
 	std::string_view get_mesg(int log_code);
 
@@ -100,11 +110,13 @@ struct arp_record{
 
 };
 
+//am i using this ?
 struct ip_log_params{
 
 	int log_level[LOG_IP_SIZE];
 	bool log_codes[LOG_IP_SIZE];
 };
+
 
 class RecordTracker{
 
@@ -114,9 +126,10 @@ class RecordTracker{
 
 	std::ofstream &logf;
 	std::vector<ip_range> &blacklist;
-	std::unordered_set<uint16_t> tracked_ports;
+	std::unordered_set<uint16_t> tracked_ports; //ports higher than 1023 that are
+	                                            //sensitive to be scanned
 
-	ip_record& insert_record(iphdr* ip_info);
+	ip_record& insert_record(iphdr* ip_info, tcphdr* tcp_info, udphdr* udp_info);
 
 	void log_arp_info();
 	void update_records();
@@ -125,12 +138,19 @@ class RecordTracker{
 
 	RecordTracker(std::ofstream &logfile, std::vector<ip_range> &_blacklist);
 
+	void print_conn_table();
+
 	private:
 
-	uint16_t get_port(iphdr* ip_bytes);
+	int is_waiting(uint32_t src, uint32_t dst);
+	int is_verified(uint32_t src, uint32_t dst);
+	void remove_conn(uint32_t src, uint32_t dst);
 
 	std::list<ip_record> records;
 	std::unordered_map<uint32_t, std::list<ip_record>::iterator> r_map;
+
+	//                opener_ip                   reciever_ip  state
+	std::unordered_map<uint32_t, std::unordered_map<uint32_t, TCPSTATE>> conn_table;
 
 };
 
