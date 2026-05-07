@@ -28,8 +28,8 @@
 #define MAX_HSCAN_CRI 80
 
 #define MAX_FLOOD_NOT 2000
-#define MAX_FLOOD_ALR 5000
-#define MAX_FLOOD_CRI 10000
+#define MAX_FLOOD_ALR 8000
+#define MAX_FLOOD_CRI 20000
 
 //IP log codes
 #define LOG_BLK_ADDR 0 //blacklisted addrs
@@ -127,6 +127,10 @@ struct ip_record{
 
 	int last_vscan_log = 0;
 	int last_hscan_log = 0;
+
+	int last_syn_flood_log = 0;
+	int last_unv_flood_log = 0;
+	int last_syn_ack_flood_log = 0;
 
 
 };

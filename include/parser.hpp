@@ -15,9 +15,10 @@
 #include <thread>
 #include <chrono>
 
-#define FLAG_IF "-i" // interface
-#define FLAG_BL "-b" // blacklist
-#define FLAG_CT "-t" // connection table
+#define FLAG_IFC "-i" // interface
+#define FLAG_BLK "-b" // blacklist
+#define FLAG_CON "--conn-table" // connection table
+#define FLAG_OUT "--stdout" //show logs
 
 struct prefix_ip_range{
 
@@ -76,14 +77,15 @@ class ArgParser{
 
 		std::pair<bool, std::string> interface;
 		std::pair<bool, std::string> blist_name;
+		bool conn_table;
+		bool stdout;
 	} flags;
 
 
 	std::string help_mesg = 
 	"\nusage: n1ds [-i interface][-b blacklist-path]\n\n"
 	"       e.g n1ds -i eth0 -b /usr/share/blacklist.txt\n\n"
-	"       blacklist format must be individual, new-line separated, CIDR address ranges\n"
-	"       or individual ip addresses\n\n";
+	"       blacklist format must be individual, new-line separated, CIDR address ranges\n\n";
 
 	std::stack<std::string> errors;
 

@@ -93,10 +93,11 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN flood attack
-	if(syn_count > MAX_FLOOD_CRI && syn_flood_cri == false){
+	if((syn_count > MAX_FLOOD_CRI && syn_flood_cri == false) || ((syn_count - last_syn_flood_log) > MAX_FLOOD_CRI)){
 
 		log_data[LOG_FLOOD_SYN] = CRITICAL;
 		syn_flood_cri = true;
+		last_syn_flood_log = syn_count;
 
 		//i reset the package counter but set the alert
 		//flag to 2 so if the log stays on the tracked
@@ -118,10 +119,11 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN+ACK flood attack
-	if(syn_ack_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false){
+	if((syn_ack_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false) || ((syn_ack_count - last_syn_ack_flood_log) > MAX_FLOOD_CRI)){
 
 		log_data[LOG_FLOOD_SACK] = CRITICAL;
 		syn_ack_flood_cri = true;
+		last_syn_ack_flood_log = syn_ack_count;
 	}
 	else if(syn_ack_count > MAX_FLOOD_ALR && syn_ack_flood_alr == false){
 
@@ -138,10 +140,11 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//UNVERIFIED flood attack
-	if(unv_count > MAX_FLOOD_CRI && unv_flood_cri == false){
+	if((unv_count > MAX_FLOOD_CRI && unv_flood_cri == false) || ((unv_count - last_unv_flood_log) > MAX_FLOOD_CRI)){
 
 		log_data[LOG_FLOOD_UNV] = CRITICAL;
 		unv_flood_cri = true;
+		last_unv_flood_log = unv_count;
 	}
 	else if(unv_count > MAX_FLOOD_ALR && unv_flood_alr == false){
 

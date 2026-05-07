@@ -238,12 +238,12 @@ ArgParser::ArgParser(int argc, char* argv[]){
 	int idx = 1;
 
 	req_flags = false;
-	int req_flags_rem = 2;
+	int req_flags_rem = 1;
 
 	while(idx < argc){
 
 		//interface
-		if(strcmp(argv[idx], FLAG_IF) == 0){
+		if(strcmp(argv[idx], FLAG_IFC) == 0){
 		
 			if(verifyFlag(idx, argc, "option -i requires an argument: \'-i <interface>\'") == 0){
 
@@ -253,14 +253,23 @@ ArgParser::ArgParser(int argc, char* argv[]){
 			}
 		}
 		//blacklist
-		else if(strcmp(argv[idx], FLAG_BL) == 0){
+		else if(strcmp(argv[idx], FLAG_BLK) == 0){
 
 			if(verifyFlag(idx, argc, "option -b required an argument: \'-b <blacklist-path>\'") == 0){
 
 				flags.blist_name.first = true;
 				flags.blist_name.second = argv[++idx];
-				req_flags_rem--;
 			}
+		}
+		//conn-table mode
+		else if(strcmp(argv[idx], FLAG_CON) == 0){
+
+			flags.conn_table = true;
+		}
+		//print logs to stdout
+		else if(strcmp(argv[idx], FLAG_OUT) == 0){
+
+			flags.stdout = true;
 		}
 
 		idx += 1;

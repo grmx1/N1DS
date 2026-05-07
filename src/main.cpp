@@ -33,11 +33,15 @@ int main(int argc, char* argv[]){
 
 	RecordTracker r_track(logfile, blacklist);
 
-	int validate_bl = parse_blacklist(clargs.flags.blist_name.second, blacklist);
 
-	if(validate_bl == 1){
+	if(clargs.flags.blist_name.first){
 
-		return 1;
+		int validate_bl = parse_blacklist(clargs.flags.blist_name.second, blacklist);
+
+		if(validate_bl == 1){
+
+			return 1;
+		}
 	}
 
 	//i will use this co calculate header_offset
