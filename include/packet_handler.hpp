@@ -24,9 +24,9 @@
 #define MAX_VSCAN_ALR 50
 #define MAX_VSCAN_CRI 200
 
-#define MAX_HSCAN_NOT 35
-#define MAX_HSCAN_ALR 50
-#define MAX_HSCAN_CRI 80
+#define MAX_HSCAN_NOT 10
+#define MAX_HSCAN_ALR 20
+#define MAX_HSCAN_CRI 40
 
 #define MAX_FLOOD_NOT 2000
 #define MAX_FLOOD_ALR 8000

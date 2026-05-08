@@ -39,6 +39,19 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	int vscan_count = dst_record[dst_ip].size();
 	int hscan_count = ports_record[dst_port].size();
 
+	/*
+	char s_ip_str_buf[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &ip, s_ip_str_buf, INET_ADDRSTRLEN);
+
+	if(strcmp(s_ip_str_buf, "192.168.1.147") == 0){
+
+		std::cout << "match" << std::endl;
+		std::cout << "VSCAN COUNT: " << vscan_count << std::endl;
+		std::cout << "HSCAN COUNT: " << hscan_count << " port: " << ntohs(dst_port) << std::endl;
+		std::cout << std::endl;
+
+	}
+	*/
 	//blackisted ip
 	if(find_ip(_blacklist, ip)){
 
@@ -71,6 +84,30 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//horizontal scan
+	if(hscan_count > MAX_HSCAN_CRI){
+
+		log_data[LOG_IP_HSCAN] = CRITICAL;
+		hscan_cri = true;
+		last_hscan_log = hscan_count;
+	}
+	else if(hscan_count > MAX_HSCAN_ALR){
+
+		log_data[LOG_IP_HSCAN] = ALERT;
+		hscan_alr = true;
+	}
+	else if(hscan_count > MAX_HSCAN_NOT){
+
+		log_data[LOG_IP_HSCAN] = NOTICE;
+		hscan_not = true;
+	}
+	else{
+
+		log_data[LOG_IP_HSCAN] = NONE;
+	}
+
+
+	/*
+	//horizontal scan
 	if((hscan_count > MAX_HSCAN_CRI && hscan_cri == false) || ((hscan_count - last_hscan_log) > MAX_HSCAN_CRI)){
 
 		log_data[LOG_IP_HSCAN] = CRITICAL;
@@ -91,6 +128,7 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 
 		log_data[LOG_IP_HSCAN] = NONE;
 	}
+*/
 
 	//SYN flood attack
 	if(syn_window_count > MAX_FLOOD_CRI && syn_flood_cri == false){
@@ -196,12 +234,24 @@ std::string ip_record::build_log(int log_code, sv log_level, sv _msg_str, sv _sr
 			break;
 
 		case LOG_FLOOD_SYN:
+
+			log << "[" << log_level << "] " << Logger::timenow() << _msg_str <<
+			" SRC: " << _src_str << " DST: " << _dst_str << " " << _proto_str <<
+			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << syn_count << "\n" ;
+			break;
+
 		case LOG_FLOOD_SACK:
+
+			log << "[" << log_level << "] " << Logger::timenow() << _msg_str <<
+			" SRC: " << _src_str << " DST: " << _dst_str << " " << _proto_str <<
+			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << syn_ack_count << "\n" ;
+			break;
+
 		case LOG_FLOOD_UNV:
 
 			log << "[" << log_level << "] " << Logger::timenow() << _msg_str <<
 			" SRC: " << _src_str << " DST: " << _dst_str << " " << _proto_str <<
-			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << flood_count << "\n" ;
+			" DPORT: " << ntohs(dst_port) << " PCK RECIEVED " << unv_count << "\n" ;
 			break;
 
 	}
