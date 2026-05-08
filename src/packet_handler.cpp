@@ -93,16 +93,10 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN flood attack
-	if((syn_count > MAX_FLOOD_CRI && syn_flood_cri == false) || ((syn_count - last_syn_flood_log) > MAX_FLOOD_CRI)){
+	if(syn_count > MAX_FLOOD_CRI && syn_flood_cri == false){
 
 		log_data[LOG_FLOOD_SYN] = CRITICAL;
 		syn_flood_cri = true;
-		last_syn_flood_log = syn_count;
-
-		//i reset the package counter but set the alert
-		//flag to 2 so if the log stays on the tracked
-		//it will only notify again after another MAX_FLOOD_CRI
-		//amount of packages
 	}
 	else if(syn_count > MAX_FLOOD_ALR && syn_flood_alr == false){
 
@@ -119,11 +113,10 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN+ACK flood attack
-	if((syn_ack_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false) || ((syn_ack_count - last_syn_ack_flood_log) > MAX_FLOOD_CRI)){
+	if(syn_ack_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false){
 
 		log_data[LOG_FLOOD_SACK] = CRITICAL;
 		syn_ack_flood_cri = true;
-		last_syn_ack_flood_log = syn_ack_count;
 	}
 	else if(syn_ack_count > MAX_FLOOD_ALR && syn_ack_flood_alr == false){
 
@@ -140,11 +133,10 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//UNVERIFIED flood attack
-	if((unv_count > MAX_FLOOD_CRI && unv_flood_cri == false) || ((unv_count - last_unv_flood_log) > MAX_FLOOD_CRI)){
+	if(unv_count > MAX_FLOOD_CRI && unv_flood_cri == false){
 
 		log_data[LOG_FLOOD_UNV] = CRITICAL;
 		unv_flood_cri = true;
-		last_unv_flood_log = unv_count;
 	}
 	else if(unv_count > MAX_FLOOD_ALR && unv_flood_alr == false){
 
@@ -159,7 +151,6 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	else{
 		log_data[LOG_FLOOD_UNV] = NONE;
 	}
-
 };
 
 std::string_view ip_record::get_mesg(int log_code){
@@ -423,6 +414,9 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info, tcphdr* tcp_info, udphdr
 		ip_r.dst_record[d_addr].insert(d_port);
 		ip_r.ports_record[d_port].insert(d_addr);
 
+		ip_r.syn_window_start = std::chrono::steady_clock::now();
+		ip_r.syn_ack_window_start = std::chrono::steady_clock::now();
+		ip_r.unv_window_start = std::chrono::steady_clock::now();
 		ip_r.last_seen = std::chrono::steady_clock::now();
 
 		//insert on the tracker data structures
@@ -472,6 +466,16 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info, tcphdr* tcp_info, udphdr
 			conn_table[s_addr][d_addr].d_port = d_port;
 		}
 
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed_last_syn = std::chrono::duration_cast<std::chrono::seconds>(now - ip_rec->syn_window_start).count();
+
+		if(elapsed_last_syn >= 1){
+			ip_rec->syn_window_start = now;
+			ip_rec->syn_flood_cri = false;
+			ip_rec->syn_window_count = 0;
+		}
+
+		ip_rec->syn_window_count += 1;
 		ip_rec->syn_count += 1;
 	}
 	else if((flags & TH_SYN) && (flags & TH_ACK)){
@@ -483,25 +487,34 @@ ip_record& RecordTracker::insert_record(iphdr* ip_info, tcphdr* tcp_info, udphdr
 			//update state
 			conn_table[d_addr][s_addr].state = TCPSTATE::VERIFIED;
 
-			//reset counters for both addr
-			ip_rec->syn_count = 0;
-			ip_rec->unv_count = 0;
-			ip_rec->syn_ack_count = 0;
-
-			if(r_map.count(d_addr)){
-
-				r_map[d_addr]->syn_count = 0;
-				r_map[d_addr]->unv_count = 0;
-				r_map[d_addr]->syn_ack_count = 0;
-			}
-
 		}
 		else{
+
+			auto now = std::chrono::steady_clock::now();
+			auto elapsed_last_syn_ack = std::chrono::duration_cast<std::chrono::seconds>(now - ip_rec->syn_ack_window_start).count();
+
+			if(elapsed_last_syn_ack >= 1){
+				ip_rec->syn_ack_window_start = now;
+				ip_rec->syn_ack_flood_cri = false;
+				ip_rec->syn_ack_window_count = 0;
+			}
+
+			ip_rec->syn_ack_window_count += 1;
 			ip_rec->syn_ack_count += 1;
 		}
 	}
 	else if(!is_verified(s_addr, d_addr)){ // i should also check for this on new records
 
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed_last_unv = std::chrono::duration_cast<std::chrono::seconds>(now - ip_rec->unv_window_start).count();
+
+		if(elapsed_last_unv >= 1){
+			ip_rec->unv_window_start = now;
+			ip_rec->unv_flood_cri = false;
+			ip_rec->unv_window_count = 0;
+		}
+
+		ip_rec->unv_window_count += 1;
 		ip_rec->unv_count += 1;
 	}
 

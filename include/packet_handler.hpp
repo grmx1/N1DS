@@ -99,7 +99,10 @@ struct ip_record{
 	int syn_count;
 	int unv_count;
 	int syn_ack_count;
-	//int flood_tracker_total;
+
+	int syn_window_count;
+	int unv_window_count;
+	int syn_ack_window_count;
 
 	                  //ip                           //port    //count
 	std::unordered_map<uint32_t, std::unordered_set<uint16_t>> dst_record;
@@ -108,14 +111,9 @@ struct ip_record{
 
 	std::chrono::steady_clock::time_point last_seen;
 
-	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data, tcphdr* tcp_info, udphdr* udp_info);
-	void log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data);
-	std::string_view get_mesg(int log_code);
-
-	using sv = std::string_view;
-	std::string build_log(int log_code, sv log_level, sv _msg_str, sv _src_str, sv _dst_str, sv _proto_str, int flood_count = 0);
-
-	private:
+	std::chrono::steady_clock::time_point syn_window_start;
+	std::chrono::steady_clock::time_point unv_window_start;
+	std::chrono::steady_clock::time_point syn_ack_window_start;
 
 	bool syn_flood_not = false;
 	bool syn_flood_alr = false;
@@ -129,6 +127,16 @@ struct ip_record{
 	bool unv_flood_alr = false;
 	bool unv_flood_cri = false;
 
+
+	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data, tcphdr* tcp_info, udphdr* udp_info);
+	void log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data);
+	std::string_view get_mesg(int log_code);
+
+	using sv = std::string_view;
+	std::string build_log(int log_code, sv log_level, sv _msg_str, sv _src_str, sv _dst_str, sv _proto_str, int flood_count = 0);
+
+	private:
+
 	bool vscan_not = false;
 	bool vscan_alr = false;
 	bool vscan_cri = false;
@@ -139,11 +147,6 @@ struct ip_record{
 
 	int last_vscan_log = 0;
 	int last_hscan_log = 0;
-
-	int last_syn_flood_log = 0;
-	int last_unv_flood_log = 0;
-	int last_syn_ack_flood_log = 0;
-
 
 };
 
