@@ -93,17 +93,17 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN flood attack
-	if(syn_count > MAX_FLOOD_CRI && syn_flood_cri == false){
+	if(syn_window_count > MAX_FLOOD_CRI && syn_flood_cri == false){
 
 		log_data[LOG_FLOOD_SYN] = CRITICAL;
 		syn_flood_cri = true;
 	}
-	else if(syn_count > MAX_FLOOD_ALR && syn_flood_alr == false){
+	else if(syn_window_count > MAX_FLOOD_ALR && syn_flood_alr == false){
 
 		log_data[LOG_FLOOD_SYN] = ALERT;
 		syn_flood_alr = true;
 	}
-	else if(syn_count > MAX_FLOOD_NOT && syn_flood_not == false){
+	else if(syn_window_count > MAX_FLOOD_NOT && syn_flood_not == false){
 
 		log_data[LOG_FLOOD_SYN] = NOTICE;
 		syn_flood_not = true;
@@ -113,17 +113,17 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//SYN+ACK flood attack
-	if(syn_ack_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false){
+	if(syn_ack_window_count > MAX_FLOOD_CRI && syn_ack_flood_cri == false){
 
 		log_data[LOG_FLOOD_SACK] = CRITICAL;
 		syn_ack_flood_cri = true;
 	}
-	else if(syn_ack_count > MAX_FLOOD_ALR && syn_ack_flood_alr == false){
+	else if(syn_ack_window_count > MAX_FLOOD_ALR && syn_ack_flood_alr == false){
 
 		log_data[LOG_FLOOD_SACK] = ALERT;
 		syn_ack_flood_alr = true;
 	}
-	else if(syn_ack_count > MAX_FLOOD_NOT && syn_ack_flood_not == false){
+	else if(syn_ack_window_count > MAX_FLOOD_NOT && syn_ack_flood_not == false){
 
 		log_data[LOG_FLOOD_SACK] = NOTICE;
 		syn_ack_flood_not = true;
@@ -133,17 +133,17 @@ void ip_record::eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int
 	}
 
 	//UNVERIFIED flood attack
-	if(unv_count > MAX_FLOOD_CRI && unv_flood_cri == false){
+	if(unv_window_count > MAX_FLOOD_CRI && unv_flood_cri == false){
 
 		log_data[LOG_FLOOD_UNV] = CRITICAL;
 		unv_flood_cri = true;
 	}
-	else if(unv_count > MAX_FLOOD_ALR && unv_flood_alr == false){
+	else if(unv_window_count > MAX_FLOOD_ALR && unv_flood_alr == false){
 
 		log_data[LOG_FLOOD_UNV] = ALERT;
 		unv_flood_alr = true;
 	}
-	else if(unv_count > MAX_FLOOD_NOT && unv_flood_not == false){
+	else if(unv_window_count > MAX_FLOOD_NOT && unv_flood_not == false){
 
 		log_data[LOG_FLOOD_UNV] = NOTICE;
 		unv_flood_not = true;
@@ -586,7 +586,6 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 	struct Context* ctx = reinterpret_cast<Context*>(args);
 	struct ethhdr* eth = nullptr;
-	bool is_ipv4 = false;
 
 	//if ethernet frame
 	if(ctx->link_type == DLT_EN10MB){
@@ -598,20 +597,10 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 			ctx->header_offset = 18;
 		}
-		is_ipv4 = true;
-	}
-	else if(ctx->link_type == DLT_LINUX_SLL){
-		//cooked header: protocol field at bytes 14-15
-		uint16_t proto = ntohs(*(uint16_t*)(packet + 14));
-		is_ipv4 = (proto == ETH_P_IP);
-	}
-	else if(ctx->link_type == DLT_RAW || ctx->link_type == DLT_NULL){
-
-		is_ipv4 = ((packet[0] >> 4) == 4);
 	}
 
 	//if this is ipv4
-	if(is_ipv4){
+	if(eth && ntohs(eth->h_proto) == ETH_P_IP){
 
 		struct iphdr* ip = (struct iphdr*)(packet + ctx->header_offset);
 
