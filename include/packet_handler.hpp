@@ -129,7 +129,7 @@ struct ip_record{
 
 
 	void eval_ip_record(std::vector<ip_range> &_blacklist, std::array<int, LOG_IP_SIZE> &log_data, tcphdr* tcp_info, udphdr* udp_info);
-	void log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data);
+	void log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data, std::ofstream &logf, bool stdout);
 	std::string_view get_mesg(int log_code);
 
 	using sv = std::string_view;

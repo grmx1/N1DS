@@ -284,7 +284,7 @@ void RecordTracker::print_conn_table(){
 
 }
 
-void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
+void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data, std::ofstream &logf, bool print_stdout){
 
 	std::string proto_str = find_proto(proto);
 
@@ -368,7 +368,12 @@ void ip_record::log_ip_record(const std::array<int, LOG_IP_SIZE> &log_data){
 
 	for(auto log : log_mesgs){
 
-		std::cout << log;
+		if(print_stdout){
+
+			std::cout << log;
+		}
+
+		logf << log << std::flush;
 	}
 };
 
@@ -685,10 +690,8 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 		ip_record &ip_rec = ctx->r_track_ptr->insert_record(ip, tcp, udp);
 
 		ip_rec.eval_ip_record(ctx->r_track_ptr->blacklist, log_data, tcp, udp);
-		if(ctx->print_stdout && !ctx->show_conn){
 
-			ip_rec.log_ip_record(log_data);
-		}
+		ip_rec.log_ip_record(log_data, ctx->r_track_ptr->logf, ctx->print_stdout);
 		if(ctx->show_conn){
 
 			ctx->r_track_ptr->print_conn_table();

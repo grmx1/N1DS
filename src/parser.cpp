@@ -275,6 +275,8 @@ ArgParser::ArgParser(int argc, char* argv[]){
 		idx += 1;
 	}
 
+	if(flags.en_stdout && flags.conn_table) flags.en_stdout = false;
+
 	if(req_flags_rem == 0){
 
 		req_flags = true;

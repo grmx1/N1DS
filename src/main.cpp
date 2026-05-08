@@ -10,7 +10,7 @@
 
 int main(int argc, char* argv[]){
 
-	std::ofstream logfile("/var/log/alerts.log");
+	std::ofstream logfile("/var/log/alerts.log", std::ios::app);
 
 	if(!logfile.is_open()){
 
