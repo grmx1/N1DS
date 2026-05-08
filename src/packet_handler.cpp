@@ -222,26 +222,20 @@ void RecordTracker::print_conn_table(){
 
 	std::array<std::string, 3> status_str = {"UNVERIFIED", "SYN_OPEN", "VERIFIED"};
 
-	char d_ip_str_buf[INET_ADDRSTRLEN];
-	char s_ip_str_buf[INET_ADDRSTRLEN];
-
-	//buffer for formatted presentaton
-	char src_str[32];
-	char dst_str[32];
+	char src_str[INET_ADDRSTRLEN];
+	char dst_str[INET_ADDRSTRLEN];
 
 	std::cout << "\033[2J\033[H";
-	std::cout << src_str << " CONN TABLE: " << std::endl;
+	std::cout << " CONN TABLE: " << std::endl;
 	for(auto src : conn_table){
 
-		inet_ntop(AF_INET, &src.first, s_ip_str_buf, INET_ADDRSTRLEN);
-		snprintf(src_str, sizeof(src_str), "%-15s", s_ip_str_buf);
+		inet_ntop(AF_INET, &src.first, src_str, INET_ADDRSTRLEN);
 
 		for(auto dst : src.second){
 
-			inet_ntop(AF_INET, &dst.first, d_ip_str_buf, INET_ADDRSTRLEN);
-			snprintf(dst_str, sizeof(dst_str), "%-15s", d_ip_str_buf);
+			inet_ntop(AF_INET, &dst.first, dst_str, INET_ADDRSTRLEN);
 
-			std::cout << "\n" << "    " << src_str << ":" << ntohs(dst.second.s_port) << " --> " << dst_str << ":" << ntohs(dst.second.d_port) << " " << status_str[static_cast<int>(dst.second.state)];
+			std::cout << "\n" << "    " << src_str << " :" << ntohs(dst.second.s_port) << " --> " << dst_str << " :" << ntohs(dst.second.d_port) << " " << status_str[static_cast<int>(dst.second.state)];
 		}
 
 		std::cout << std::endl << std::endl;
