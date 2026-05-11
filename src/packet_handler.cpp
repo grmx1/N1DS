@@ -685,8 +685,6 @@ void callback(u_char* args, const struct pcap_pkthdr* pkthdr, const u_char* pack
 
 		std::array<int, LOG_IP_SIZE> log_data = {0};
 
-		//i think idc if it is ehternet at this point but maybe
-		//im wrong and this crashes something
 		ip_record &ip_rec = ctx->r_track_ptr->insert_record(ip, tcp, udp);
 
 		ip_rec.eval_ip_record(ctx->r_track_ptr->blacklist, log_data, tcp, udp);

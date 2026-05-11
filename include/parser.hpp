@@ -83,7 +83,7 @@ class ArgParser{
 
 
 	std::string help_mesg = 
-	"\nusage: n1ds [-i interface][-b blacklist-path]\n\n"
+	"\nusage: n1ds -i interface [-b blacklist-path] { [--stdout] | [--conn_table] }\n\n"
 	"       e.g n1ds -i eth0 -b /usr/share/blacklist.txt\n\n"
 	"       blacklist format must be individual, new-line separated, CIDR address ranges\n\n";
 
